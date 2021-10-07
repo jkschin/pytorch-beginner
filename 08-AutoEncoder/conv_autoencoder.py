@@ -35,7 +35,10 @@ def to_img(x):
 
 
 num_epochs = 1000
-batch_size = 128
+if torch.cuda.is_available():
+    batch_size = 128
+else:
+    batch_size = 1
 learning_rate = 1e-3
 
 img_transform = transforms.Compose([
@@ -84,64 +87,71 @@ class CustomDataset(Dataset):
 dataset = CustomDataset(transform=img_transform)
 dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-
 class autoencoder(nn.Module):
     def __init__(self):
         super(autoencoder, self).__init__()
-        self.encoder = nn.Sequential(
-            nn.Conv2d(2, 64, 3),
+        self.block1 = nn.Sequential(
+            nn.Conv2d(3, 64, 3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
             nn.ReLU(True),
-            nn.Conv2d(64, 64, 3),
-            nn.ReLU(True),
-            nn.Conv2d(64, 64, 5),
-            nn.ReLU(True),
-            nn.Conv2d(64, 64, 5),
-            nn.ReLU(True),
-            nn.Conv2d(64, 64, 5),
-            nn.ReLU(True),
-            nn.Conv2d(64, 64, 5),
-            nn.ReLU(True),
-            nn.Conv2d(64, 64, 5),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(64, 64, 5),  # b, 16, 5, 5
-            nn.ReLU(True),
-            nn.ConvTranspose2d(64, 64, 5),  # b, 16, 5, 5
-            nn.ReLU(True),
-            nn.ConvTranspose2d(64, 64, 5),  # b, 16, 5, 5
-            nn.ReLU(True),
-            nn.ConvTranspose2d(64, 64, 5),  # b, 16, 5, 5
-            nn.ReLU(True),
-            nn.ConvTranspose2d(64, 64, 5),  # b, 16, 5, 5
-            nn.ReLU(True),
-            nn.ConvTranspose2d(64, 64, 3),  # b, 16, 5, 5
-            nn.ReLU(True),
-            nn.ConvTranspose2d(64, 1, 3),  # b, 16, 5, 5
-            # nn.MaxPool2d(2, stride=2),  # b, 16, 5, 5
-            # nn.Conv2d(128, 128, 3, stride=2, padding=1),  # b, 8, 3, 3
-            # nn.ReLU(True),
-            # nn.MaxPool2d(2, stride=1)  # b, 8, 2, 2
+            nn.AvgPool2d(kernel_size=2, stride=2),
         )
-        self.decoder = nn.Sequential(
-            nn.ConvTranspose2d(128, 128, 3, stride=2),  # b, 16, 5, 5
+        self.block2 = nn.Sequential(
+            nn.Conv2d(64, 128, 3, stride=1, padding=1),
+            nn.BatchNorm2d(128),
             nn.ReLU(True),
-            nn.ConvTranspose2d(128, 128, 5, stride=3, padding=1),  # b, 8, 15, 15
-            nn.ReLU(True),
-            nn.ConvTranspose2d(128, 1, 1, stride=2, padding=1),  # b, 1, 28, 28
-            # nn.Tanh()
+            nn.AvgPool2d(kernel_size=2, stride=2),
         )
-        #self.last = nn.Sequential(
-        #    nn.Conv2d(17, 3, 3, padding=1)
-        #)
+        self.block3 = nn.Sequential(
+            nn.Conv2d(128, 256, 3, stride=1, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(True),
+            nn.AvgPool2d(kernel_size=2, stride=2),
+        )
+        self.block4 = nn.Sequential(
+            nn.Conv2d(256, 512, 3, stride=1, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(True),
+            nn.AvgPool2d(kernel_size=2, stride=2),
+        )
+        self.block4T = nn.Sequential(
+            nn.ConvTranspose2d(512, 256, 3, stride=2, padding=1, output_padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(True),
+        )
+        self.block3T = nn.Sequential(
+            nn.ConvTranspose2d(256, 128, 3, stride=2, padding=1, output_padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(True),
+        )
+        self.block2T = nn.Sequential(
+            nn.ConvTranspose2d(128, 64, 3, stride=2, padding=1, output_padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(True),
+        )
+        self.block1T = nn.Sequential(
+            nn.ConvTranspose2d(64, 32, 3, stride=2, padding=1, output_padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(True),
+        )
 
     def forward(self, x):
-        orig_x = x
-        x = self.encoder(x)
-        x = torch.cat([orig_x, x], 1)
+        # orig_x = x
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.block3(x)
+        x = self.block4(x)
+        x = self.block4T(x)
+        x = self.block3T(x)
+        x = self.block2T(x)
+        x = self.block1T(x)
+        # x = torch.cat([orig_x, x], 1)
         return x
 
-
-model = autoencoder().cuda()
-# model = autoencoder()
+if torch.cuda.is_available():
+    model = autoencoder().cuda()
+else:
+    model = autoencoder()
 print(model)
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate,
@@ -150,7 +160,8 @@ total_loss = 0
 for epoch in range(num_epochs):
     for data in dataloader:
         inp, out = data
-        inp, out = inp.cuda(), out.cuda()
+        if torch.cuda.is_available():
+            inp, out = inp.cuda(), out.cuda()
         # ===================forward=====================
         # print(inp.dtype)
         # print(inp.shape)

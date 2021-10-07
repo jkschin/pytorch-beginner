@@ -85,12 +85,15 @@ def generate_distances(coords):
 
     return dists
 
-def generate_coordinates(n):
+def generate_coordinates(n, image_size):
+    w, l = image_size
+    w -= 1
+    l -= 1
     coords = []
     for _ in range(n):
         while True:
-            x = random.randint(1, 99)
-            y = random.randint(1, 99)
+            x = random.randint(1, w)
+            y = random.randint(1, l)
             coord = (x, y)
             if coord not in coords:
                 coords.append(coord)
@@ -128,18 +131,32 @@ def draw_path(img, coords, path):
     img = cv2.line(img, a, b, (2), 1)
     return img
 
+def draw_full_connections(img, coords):
+    for i in range(len(coords)):
+        for j in range(len(coords)):
+            a = coords[i]
+            b = coords[j]
+            img = cv2.line(img, a, b, (2), 1)
+    return img
+
+def draw_inp(img, coords):
+    img = draw_full_connections(img, coords)
+    img = draw_dots(img, coords)
+    return img
+
 def draw_sol(img, coords, path):
     img = draw_path(img, coords, path)
     img = draw_dots(img, coords)
     return img
 
 def generate_pair(n):
-    coords = generate_coordinates(n)
+    image_size = (256, 256)
+    coords = generate_coordinates(n, image_size)
     dists = generate_distances(coords)
     tsp_sol = held_karp(dists)
-    inp = np.zeros((100, 100), np.uint8)
-    inp = draw_dots(inp, coords)
-    out = np.zeros((100, 100), np.uint8)
+    inp = np.zeros(image_size, np.uint8)
+    inp = draw_inp(inp, coords)
+    out = np.zeros(image_size, np.uint8)
     out = draw_sol(out, coords, tsp_sol[1])
     return inp, out
 
@@ -150,22 +167,18 @@ if __name__ == '__main__':
     if arg.endswith('.csv'):
         dists = read_distances(arg)
     else:
-        for i in range(100):
-            coords = generate_coordinates(int(arg))
-            dists = generate_distances(coords)
-            tsp_sol = held_karp(dists)
-            img = np.ones((100, 100, 3), np.uint8)
-            img *= 255
-            img = draw_dots(img, coords)
-            cv2.imwrite("inputs/img%d.png" %i, img)
-            img = draw_sol(img, coords, tsp_sol[1])
-            cv2.imwrite("outputs/img%d.png" %i, img)
+        for i in range(1):
+            inp, out = generate_pair(int(arg))
+            inp *= 124
+            out *= 124
+            cv2.imwrite("inputs/img%d.png" %i, inp)
+            cv2.imwrite("outputs/img%d.png" %i, out)
 
 
     # Pretty-print the distance matrix
-    for row in dists:
-        print(''.join([str(int(n)).rjust(3, ' ') for n in row]))
-
-    print('')
-
-    print(tsp_sol)
+    # for row in dists:
+    #     print(''.join([str(int(n)).rjust(3, ' ') for n in row]))
+    #
+    # print('')
+    #
+    # print(tsp_sol)
