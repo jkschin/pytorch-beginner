@@ -147,7 +147,7 @@ class autoencoder(nn.Module):
         x = self.block1T(x)
         x = nn.Sequential(
             nn.Conv2d(32, 3, 1, stride=1)
-        )(x)
+        ).cuda()(x)
         # x = torch.cat([orig_x, x], 1)
         return x
 
