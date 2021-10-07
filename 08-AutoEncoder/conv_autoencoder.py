@@ -87,6 +87,7 @@ class CustomDataset(Dataset):
 dataset = CustomDataset(transform=img_transform)
 dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
+# Experiment 1 - Convolution and Deconvolution
 class autoencoder(nn.Module):
     def __init__(self):
         super(autoencoder, self).__init__()
