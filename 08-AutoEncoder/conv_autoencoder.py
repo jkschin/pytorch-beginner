@@ -92,7 +92,16 @@ class autoencoder(nn.Module):
     def __init__(self):
         super(autoencoder, self).__init__()
         self.block1 = nn.Sequential(
-            nn.Conv2d(3, 32, 7, stride=1, padding=3),
+            nn.Conv2d(3, 32, 3, stride=1, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(True),
+            nn.Conv2d(32, 32, 3, stride=1, padding=1),
+            nn.BatchNorm2d(32),
+            nn.ReLU(True),
+            nn.Conv2d(32, 32, 5, stride=1, padding=2),
+            nn.BatchNorm2d(32),
+            nn.ReLU(True),
+            nn.Conv2d(32, 32, 5, stride=1, padding=2),
             nn.BatchNorm2d(32),
             nn.ReLU(True),
             nn.Conv2d(32, 32, 7, stride=1, padding=3),
@@ -101,22 +110,10 @@ class autoencoder(nn.Module):
             nn.Conv2d(32, 32, 7, stride=1, padding=3),
             nn.BatchNorm2d(32),
             nn.ReLU(True),
-            nn.Conv2d(32, 32, 7, stride=1, padding=3),
+            nn.Conv2d(32, 32, 3, stride=1, padding=1),
             nn.BatchNorm2d(32),
             nn.ReLU(True),
-            nn.Conv2d(32, 32, 7, stride=1, padding=3),
-            nn.BatchNorm2d(32),
-            nn.ReLU(True),
-            nn.Conv2d(32, 32, 7, stride=1, padding=3),
-            nn.BatchNorm2d(32),
-            nn.ReLU(True),
-            nn.Conv2d(32, 32, 7, stride=1, padding=3),
-            nn.BatchNorm2d(32),
-            nn.ReLU(True),
-            nn.Conv2d(32, 32, 7, stride=1, padding=3),
-            nn.BatchNorm2d(32),
-            nn.ReLU(True),
-            nn.Conv2d(32, 32, 7, stride=1, padding=3),
+            nn.Conv2d(32, 32, 3, stride=1, padding=1),
             nn.BatchNorm2d(32),
             nn.ReLU(True),
         )
@@ -161,7 +158,7 @@ class autoencoder(nn.Module):
         x6 = self.pool6(x)
         x = torch.cat([x, x1, x2, x3, x4, x5, x6], 1)
         x = nn.Sequential(
-            nn.Conv2d(32, 3, 1, stride=1)
+            nn.Conv2d(38, 3, 1, stride=1)
         ).cuda()(x)
         return x
 
