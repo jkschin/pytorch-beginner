@@ -87,69 +87,82 @@ class CustomDataset(Dataset):
 dataset = CustomDataset(transform=img_transform)
 dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-# Experiment 1 - Convolution and Deconvolution
+# Experiment 2 - Convolution only to extract feature maps. Pyramid Pooling next.
 class autoencoder(nn.Module):
     def __init__(self):
         super(autoencoder, self).__init__()
         self.block1 = nn.Sequential(
-            nn.Conv2d(3, 64, 3, stride=1, padding=1),
-            nn.BatchNorm2d(64),
+            nn.Conv2d(3, 32, 7, stride=1, padding=3),
+            nn.BatchNorm2d(32),
             nn.ReLU(True),
-            nn.AvgPool2d(kernel_size=2, stride=2),
-        )
-        self.block2 = nn.Sequential(
-            nn.Conv2d(64, 128, 3, stride=1, padding=1),
-            nn.BatchNorm2d(128),
+            nn.Conv2d(32, 32, 7, stride=1, padding=3),
+            nn.BatchNorm2d(32),
             nn.ReLU(True),
-            nn.AvgPool2d(kernel_size=2, stride=2),
-        )
-        self.block3 = nn.Sequential(
-            nn.Conv2d(128, 256, 3, stride=1, padding=1),
-            nn.BatchNorm2d(256),
+            nn.Conv2d(32, 32, 7, stride=1, padding=3),
+            nn.BatchNorm2d(32),
             nn.ReLU(True),
-            nn.AvgPool2d(kernel_size=2, stride=2),
-        )
-        self.block4 = nn.Sequential(
-            nn.Conv2d(256, 512, 3, stride=1, padding=1),
-            nn.BatchNorm2d(512),
+            nn.Conv2d(32, 32, 7, stride=1, padding=3),
+            nn.BatchNorm2d(32),
             nn.ReLU(True),
-            nn.AvgPool2d(kernel_size=2, stride=2),
-        )
-        self.block4T = nn.Sequential(
-            nn.ConvTranspose2d(512, 256, 3, stride=2, padding=1, output_padding=1),
-            nn.BatchNorm2d(256),
+            nn.Conv2d(32, 32, 7, stride=1, padding=3),
+            nn.BatchNorm2d(32),
             nn.ReLU(True),
-        )
-        self.block3T = nn.Sequential(
-            nn.ConvTranspose2d(256, 128, 3, stride=2, padding=1, output_padding=1),
-            nn.BatchNorm2d(128),
+            nn.Conv2d(32, 32, 7, stride=1, padding=3),
+            nn.BatchNorm2d(32),
             nn.ReLU(True),
-        )
-        self.block2T = nn.Sequential(
-            nn.ConvTranspose2d(128, 64, 3, stride=2, padding=1, output_padding=1),
-            nn.BatchNorm2d(64),
+            nn.Conv2d(32, 32, 7, stride=1, padding=3),
+            nn.BatchNorm2d(32),
             nn.ReLU(True),
-        )
-        self.block1T = nn.Sequential(
-            nn.ConvTranspose2d(64, 32, 3, stride=2, padding=1, output_padding=1),
+            nn.Conv2d(32, 32, 7, stride=1, padding=3),
+            nn.BatchNorm2d(32),
+            nn.ReLU(True),
+            nn.Conv2d(32, 32, 7, stride=1, padding=3),
             nn.BatchNorm2d(32),
             nn.ReLU(True),
         )
+        self.pool1 = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Upsample(size=(256, 256), mode="bilinear"),
+            nn.Conv2d(32, 1, 1)
+        )
+        self.pool2 = nn.Sequential(
+            nn.AdaptiveAvgPool2d((2, 2)),
+            nn.Upsample(size=(256, 256), mode="bilinear"),
+            nn.Conv2d(32, 1, 1)
+        )
+        self.pool3 = nn.Sequential(
+            nn.AdaptiveAvgPool2d((3, 3)),
+            nn.Upsample(size=(256, 256), mode="bilinear"),
+            nn.Conv2d(32, 1, 1)
+        )
+        self.pool4 = nn.Sequential(
+            nn.AdaptiveAvgPool2d((6, 6)),
+            nn.Upsample(size=(256, 256), mode="bilinear"),
+            nn.Conv2d(32, 1, 1)
+        )
+        self.pool5 = nn.Sequential(
+            nn.AdaptiveAvgPool2d((10, 10)),
+            nn.Upsample(size=(256, 256), mode="bilinear"),
+            nn.Conv2d(32, 1, 1)
+        )
+        self.pool6 = nn.Sequential(
+            nn.AdaptiveAvgPool2d((20, 20)),
+            nn.Upsample(size=(256, 256), mode="bilinear"),
+            nn.Conv2d(32, 1, 1)
+        )
 
     def forward(self, x):
-        # orig_x = x
         x = self.block1(x)
-        x = self.block2(x)
-        x = self.block3(x)
-        x = self.block4(x)
-        x = self.block4T(x)
-        x = self.block3T(x)
-        x = self.block2T(x)
-        x = self.block1T(x)
+        x1 = self.pool1(x)
+        x2 = self.pool2(x)
+        x3 = self.pool3(x)
+        x4 = self.pool4(x)
+        x5 = self.pool5(x)
+        x6 = self.pool6(x)
+        x = torch.cat([x, x1, x2, x3, x4, x5, x6], 1)
         x = nn.Sequential(
             nn.Conv2d(32, 3, 1, stride=1)
         ).cuda()(x)
-        # x = torch.cat([orig_x, x], 1)
         return x
 
 if torch.cuda.is_available():
