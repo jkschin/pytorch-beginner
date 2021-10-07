@@ -28,7 +28,7 @@ def to_img(x):
     # print(torch.max(x))
     # print(x.shape)
     # print(x.dtype)
-    x = x.view(x.size(0), 1, 100, 100)
+    x = x.view(x.size(0), 1, 256, 256)
     # print(x.dtype)
     # print(torch.max(x))
     return x
@@ -145,6 +145,9 @@ class autoencoder(nn.Module):
         x = self.block3T(x)
         x = self.block2T(x)
         x = self.block1T(x)
+        x = nn.Sequential(
+            nn.Conv2d(32, 3, 1, stride=1)
+        )(x)
         # x = torch.cat([orig_x, x], 1)
         return x
 
