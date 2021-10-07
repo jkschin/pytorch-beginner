@@ -12,6 +12,7 @@ from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
 import os
 import heldkarp
+from collections import Counter
 
 if not os.path.exists('./dc_img'):
     os.mkdir('./dc_img')
@@ -19,7 +20,9 @@ if not os.path.exists('./dc_img'):
 
 def to_img(x):
     x = torch.argmax(x, dim=1)
-    print(torch.unique(x))
+    x = torch.flatten()
+    x = x.tolist()
+    print(Counter(x))
     x *= 126
     # x = 0.5 * (x + 1)
     x = x.clamp(0, 1)
@@ -28,7 +31,7 @@ def to_img(x):
     # print(torch.max(x))
     # print(x.shape)
     # print(x.dtype)
-    x = x.view(x.size(0), 1, 256, 256)
+    x = x.view(x.size(0), 1, 100, 100)
     # print(x.dtype)
     # print(torch.max(x))
     return x
@@ -53,28 +56,17 @@ class CustomDataset(Dataset):
         return 1000
 
     def __getitem__(self, idx):
-        inp, out = heldkarp.generate_pair(10)
+        inp, out = heldkarp.generate_pair(5)
         inp = torch.as_tensor(inp, dtype=torch.int64)
         inp = F.one_hot(inp)
         inp = torch.transpose(inp, 1, 2)
         inp = torch.transpose(inp, 0, 1)
         inp = torch.squeeze(inp)
         inp = inp.type(torch.FloatTensor)
-        # inp = inp.type(torch.FloatTensor)
-        # inp.type(torch.LongTensor)
 
         out = torch.as_tensor(out, dtype=torch.int64)
-        # out = F.one_hot(out)
-        # out = torch.transpose(out, 0, 2)
-        # out = torch.squeeze(out)
         out = out.type(torch.LongTensor)
-        # out.type(torch.LongTensor)
-        # if self.transform:
-        #     inp = self.transform(inp)
-        #     out = self.transform(out)
-        # print(inp)
-        # print(inp.shape)
-        # inp, out = F.one_hot(inp), F.one_hot(out)
+
         test = torch.as_tensor(out, dtype=torch.int64)
         test = F.one_hot(test)
         test = torch.transpose(test, 1, 2)
@@ -117,38 +109,40 @@ class autoencoder(nn.Module):
             nn.BatchNorm2d(32),
             nn.ReLU(True),
         )
+        image_size = (100, 100)
         self.pool1 = nn.Sequential(
             nn.AdaptiveAvgPool2d((1, 1)),
-            nn.Upsample(size=(256, 256), mode="bilinear"),
+            nn.Upsample(size=image_size, mode="bilinear"),
             nn.Conv2d(32, 1, 1)
         )
         self.pool2 = nn.Sequential(
             nn.AdaptiveAvgPool2d((2, 2)),
-            nn.Upsample(size=(256, 256), mode="bilinear"),
+            nn.Upsample(size=image_size, mode="bilinear"),
             nn.Conv2d(32, 1, 1)
         )
         self.pool3 = nn.Sequential(
             nn.AdaptiveAvgPool2d((3, 3)),
-            nn.Upsample(size=(256, 256), mode="bilinear"),
+            nn.Upsample(size=image_size, mode="bilinear"),
             nn.Conv2d(32, 1, 1)
         )
         self.pool4 = nn.Sequential(
             nn.AdaptiveAvgPool2d((6, 6)),
-            nn.Upsample(size=(256, 256), mode="bilinear"),
+            nn.Upsample(size=image_size, mode="bilinear"),
             nn.Conv2d(32, 1, 1)
         )
         self.pool5 = nn.Sequential(
             nn.AdaptiveAvgPool2d((10, 10)),
-            nn.Upsample(size=(256, 256), mode="bilinear"),
+            nn.Upsample(size=image_size, mode="bilinear"),
             nn.Conv2d(32, 1, 1)
         )
         self.pool6 = nn.Sequential(
             nn.AdaptiveAvgPool2d((20, 20)),
-            nn.Upsample(size=(256, 256), mode="bilinear"),
+            nn.Upsample(size=image_size, mode="bilinear"),
             nn.Conv2d(32, 1, 1)
         )
 
     def forward(self, x):
+        orig_x = x
         x = self.block1(x)
         x1 = self.pool1(x)
         x2 = self.pool2(x)
@@ -158,8 +152,9 @@ class autoencoder(nn.Module):
         x6 = self.pool6(x)
         x = torch.cat([x, x1, x2, x3, x4, x5, x6], 1)
         x = nn.Sequential(
-            nn.Conv2d(38, 3, 1, stride=1)
+            nn.Conv2d(38, 1, 1, stride=1)
         ).cuda()(x)
+        x = torch.cat[orig_x[:, 0:2, :, :], x]
         return x
 
 if torch.cuda.is_available():
@@ -170,8 +165,8 @@ print(model)
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate,
                              weight_decay=1e-5)
-total_loss = 0
 for epoch in range(num_epochs):
+    total_loss = 0
     for data in dataloader:
         inp, out = data
         if torch.cuda.is_available():
