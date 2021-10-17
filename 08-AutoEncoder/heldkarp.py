@@ -150,7 +150,7 @@ def draw_sol(img, coords, path):
     return img
 
 def generate_pair(n):
-    image_size = (100, 100)
+    image_size = (128, 128)
     coords = generate_coordinates(n, image_size)
     dists = generate_distances(coords)
     tsp_sol = held_karp(dists)

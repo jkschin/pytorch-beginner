@@ -1,5 +1,6 @@
 __author__ = 'SherlockLiao'
 
+import cv2
 import torch
 import torchvision
 from torch import nn
@@ -13,12 +14,21 @@ import torch.nn.functional as F
 import os
 import heldkarp
 from collections import Counter
+import numpy as np
 
 output_dir = "dc_img128x128xTSP5_v2"
-image_size = (128, 128)
+image_size = (256, 256)
 if not os.path.exists('./%s' %output_dir):
     os.mkdir('./%s' %output_dir)
 
+RED = (0, 0, 255)
+GREEN = (0, 255, 0)
+BLUE = (255, 0, 0)
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+BACKGROUND = 0
+CITY = 1
+PATH = 2
 
 def to_img(x):
     x = torch.argmax(x, dim=1)
@@ -51,13 +61,36 @@ img_transform = transforms.Compose([
 
 class CustomDataset(Dataset):
     def __init__(self, transform=None):
+        self.root_dir = "/Users/samuelchin/Desktop/MIT/Thesis/held-karp/"
         self.transform = transform
 
     def __len__(self):
-        return 1000
+        return 100
+
+    def transform_img(self, img, colors, classes):
+        new_img = np.zeros(img.shape[0:2])
+        zipped = zip(colors, classes)
+        for color, classs in zipped:
+            indexes = np.where((img == color).all(axis=2))
+            new_img[indexes] = classs
+        return new_img
+
+    def transform_inp(self, img):
+        colors = [BLACK, RED, WHITE]
+        classes = [BACKGROUND, CITY, PATH]
+        img = self.transform_img(img, colors, classes)
+        return img
+
+    def transform_out(self, img):
+        colors = [GREEN]
+        classes = [PATH]
+        img = self.transform_img(img, colors, classes)
+        return img
 
     def __getitem__(self, idx):
-        inp, out = heldkarp.generate_pair(5)
+        inp_name = os.path.join(self.root_dir, "inputs", "input_%05d.png" %idx)
+        inp = cv2.imread(inp_name)
+        inp = self.transform_inp(inp)
         inp = torch.as_tensor(inp, dtype=torch.int64)
         inp = F.one_hot(inp)
         inp = torch.transpose(inp, 1, 2)
@@ -65,28 +98,29 @@ class CustomDataset(Dataset):
         inp = torch.squeeze(inp)
         inp = inp.type(torch.FloatTensor)
 
+        out_name = os.path.join(self.root_dir, "outputs", "output_%05d.png" %idx)
+        out = cv2.imread(out_name)
+        out = self.transform_out(out)
         out = torch.as_tensor(out, dtype=torch.int64)
         out = out.type(torch.LongTensor)
-
-        test = torch.as_tensor(out, dtype=torch.int64)
-        test = F.one_hot(test)
-        test = torch.transpose(test, 1, 2)
-        test = torch.transpose(test, 0, 1)
-        test = torch.squeeze(test)
-        test = test.type(torch.FloatTensor)
+        # test = torch.as_tensor(out, dtype=torch.int64)
+        # test = F.one_hot(test)
+        # test = torch.transpose(test, 1, 2)
+        # test = torch.transpose(test, 0, 1)
+        # test = torch.squeeze(test)
+        # test = test.type(torch.FloatTensor)
         return inp, out
 
 # dataset = MNIST('./data', transform=img_transform, download=True)
 dataset = CustomDataset(transform=img_transform)
 dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
-# Experiment 2 - Convolution only to extract feature maps. Pyramid Pooling next.
 class autoencoder(nn.Module):
     def __init__(self):
         super(autoencoder, self).__init__()
         self.block1 = nn.Sequential(
-            nn.Conv2d(3, 32, 3, stride=1, padding=1),
-            nn.BatchNorm2d(32),
+            nn.Conv2d(3, 64, 3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
             nn.ReLU(True),
             nn.Conv2d(64, 64, 3, stride=1, padding=1),
             nn.BatchNorm2d(64),
@@ -115,16 +149,25 @@ class autoencoder(nn.Module):
             nn.Conv2d(256, 512, 3, stride=1, padding=1),
             nn.BatchNorm2d(512),
             nn.ReLU(True),
-            nn.Conv2d(32, 32, 7, stride=1, padding=3),
-            nn.BatchNorm2d(32),
+            nn.AvgPool2d(kernel_size=2, stride=2),
+        )
+        self.block4T = nn.Sequential(
+            nn.ConvTranspose2d(512, 256, 3, stride=2, padding=1, output_padding=1),
+            nn.BatchNorm2d(256),
             nn.ReLU(True),
-            nn.Conv2d(32, 32, 7, stride=1, padding=3),
-            nn.BatchNorm2d(32),
+        )
+        self.block3T = nn.Sequential(
+            nn.ConvTranspose2d(256, 128, 3, stride=2, padding=1, output_padding=1),
+            nn.BatchNorm2d(128),
             nn.ReLU(True),
-            nn.Conv2d(32, 32, 3, stride=1, padding=1),
-            nn.BatchNorm2d(32),
+        )
+        self.block2T = nn.Sequential(
+            nn.ConvTranspose2d(128, 64, 3, stride=2, padding=1, output_padding=1),
+            nn.BatchNorm2d(64),
             nn.ReLU(True),
-            nn.Conv2d(32, 32, 3, stride=1, padding=1),
+        )
+        self.block1T = nn.Sequential(
+            nn.ConvTranspose2d(64, 32, 3, stride=2, padding=1, output_padding=1),
             nn.BatchNorm2d(32),
             nn.ReLU(True),
         )
@@ -147,6 +190,10 @@ class autoencoder(nn.Module):
             nn.Upsample(size=image_size, mode="bilinear"),
         )
 
+        self.last = nn.Sequential(
+            nn.Conv2d(36, 3, 1, stride=1),
+        )
+
     def forward(self, x):
         x_orig = x
         x = self.block1(x)
@@ -161,9 +208,7 @@ class autoencoder(nn.Module):
         x = self.block2T(x)
         x = self.block1T(x)
         x = torch.cat([x2, x3, x4, x, x_orig[:, 1:2, :, :]], 1)
-        x = nn.Sequential(
-            nn.Conv2d(36, 3, 1, stride=1),
-        ).cuda()(x)
+        x = self.last(x)
         return x
 
 if torch.cuda.is_available():
@@ -175,8 +220,8 @@ def init_weights(m):
     if isinstance(m, nn.Conv2d):
         torch.nn.init.kaiming_uniform
 model.apply(init_weights)
-weights = torch.FloatTensor([1, 1, 1]).cuda()
-criterion = nn.CrossEntropyLoss(weight=weights)
+# weights = torch.FloatTensor([1, 1, 1]).cuda()
+criterion = nn.CrossEntropyLoss()
 # criterion = nn.NLLLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate,
                              weight_decay=1e-5)
