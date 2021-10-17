@@ -12,14 +12,19 @@ from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
 import os
 import heldkarp
+from collections import Counter
 
-if not os.path.exists('./dc_img'):
-    os.mkdir('./dc_img')
+output_dir = "dc_img128x128xTSP5_v2"
+image_size = (128, 128)
+if not os.path.exists('./%s' %output_dir):
+    os.mkdir('./%s' %output_dir)
 
 
 def to_img(x):
     x = torch.argmax(x, dim=1)
     print(torch.unique(x))
+    print(Counter(torch.flatten(x).tolist()))
+
     x *= 126
     # x = 0.5 * (x + 1)
     x = x.clamp(0, 1)
@@ -28,13 +33,13 @@ def to_img(x):
     # print(torch.max(x))
     # print(x.shape)
     # print(x.dtype)
-    x = x.view(x.size(0), 1, 256, 256)
+    x = x.view(x.size(0), 1, image_size[0], image_size[1])
     # print(x.dtype)
     # print(torch.max(x))
     return x
 
 
-num_epochs = 1000
+num_epochs = 10000
 if torch.cuda.is_available():
     batch_size = 128
 else:
@@ -53,7 +58,7 @@ class CustomDataset(Dataset):
         return 1000
 
     def __getitem__(self, idx):
-        inp, out = heldkarp.generate_pair(10)
+        inp, out = heldkarp.generate_pair(5)
         inp = torch.as_tensor(inp, dtype=torch.int64)
         inp = F.one_hot(inp)
         inp = torch.transpose(inp, 1, 2)
@@ -95,16 +100,25 @@ class autoencoder(nn.Module):
             nn.Conv2d(3, 64, 3, stride=1, padding=1),
             nn.BatchNorm2d(64),
             nn.ReLU(True),
+            nn.Conv2d(64, 64, 3, stride=1, padding=1),
+            nn.BatchNorm2d(64),
+            nn.ReLU(True),
             nn.AvgPool2d(kernel_size=2, stride=2),
         )
         self.block2 = nn.Sequential(
             nn.Conv2d(64, 128, 3, stride=1, padding=1),
             nn.BatchNorm2d(128),
             nn.ReLU(True),
+            nn.Conv2d(128, 128, 3, stride=1, padding=1),
+            nn.BatchNorm2d(128),
+            nn.ReLU(True),
             nn.AvgPool2d(kernel_size=2, stride=2),
         )
         self.block3 = nn.Sequential(
             nn.Conv2d(128, 256, 3, stride=1, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(True),
+            nn.Conv2d(256, 256, 3, stride=1, padding=1),
             nn.BatchNorm2d(256),
             nn.ReLU(True),
             nn.AvgPool2d(kernel_size=2, stride=2),
@@ -135,21 +149,42 @@ class autoencoder(nn.Module):
             nn.BatchNorm2d(32),
             nn.ReLU(True),
         )
+        self.pool4 = nn.Sequential(
+            nn.Conv2d(512, 1, 1),
+            nn.BatchNorm2d(1),
+            nn.ReLU(True),
+            nn.Upsample(size=image_size, mode="bilinear"),
+        )
+        self.pool3 = nn.Sequential(
+            nn.Conv2d(256, 1, 1),
+            nn.BatchNorm2d(1),
+            nn.ReLU(True),
+            nn.Upsample(size=image_size, mode="bilinear"),
+        )
+        self.pool2 = nn.Sequential(
+            nn.Conv2d(128, 1, 1),
+            nn.BatchNorm2d(1),
+            nn.ReLU(True),
+            nn.Upsample(size=image_size, mode="bilinear"),
+        )
 
     def forward(self, x):
-        # orig_x = x
+        x_orig = x
         x = self.block1(x)
         x = self.block2(x)
+        x2 = self.pool2(x)
         x = self.block3(x)
+        x3 = self.pool3(x)
         x = self.block4(x)
+        x4 = self.pool4(x)
         x = self.block4T(x)
         x = self.block3T(x)
         x = self.block2T(x)
         x = self.block1T(x)
+        x = torch.cat([x2, x3, x4, x, x_orig[:, 1:2, :, :]], 1)
         x = nn.Sequential(
-            nn.Conv2d(32, 3, 1, stride=1)
+            nn.Conv2d(36, 3, 1, stride=1),
         ).cuda()(x)
-        # x = torch.cat([orig_x, x], 1)
         return x
 
 if torch.cuda.is_available():
@@ -157,11 +192,18 @@ if torch.cuda.is_available():
 else:
     model = autoencoder()
 print(model)
-criterion = nn.CrossEntropyLoss()
+def init_weights(m):
+    if isinstance(m, nn.Conv2d):
+        torch.nn.init.kaiming_uniform
+model.apply(init_weights)
+weights = torch.FloatTensor([1, 1, 1]).cuda()
+criterion = nn.CrossEntropyLoss(weight=weights)
+# criterion = nn.NLLLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate,
                              weight_decay=1e-5)
-total_loss = 0
+# optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
 for epoch in range(num_epochs):
+    total_loss = 0
     for data in dataloader:
         inp, out = data
         if torch.cuda.is_available():
@@ -182,6 +224,6 @@ for epoch in range(num_epochs):
     if epoch % 10 == 0:
         print("Image written")
         pic = to_img(output.cpu().data)
-        save_image(pic, './dc_img/image_{}.png'.format(epoch))
+        save_image(pic, './{}/image_{}.png'.format(output_dir, epoch))
 
 torch.save(model.state_dict(), './conv_autoencoder.pth')
