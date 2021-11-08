@@ -16,8 +16,8 @@ import heldkarp
 from collections import Counter
 import numpy as np
 
-output_dir = "dc_img128x128xTSP5_v2"
-image_size = (256, 256)
+output_dir = "202110171724-Expt4-Weighted-Loss-112-thick"
+image_size = (128, 128)
 if not os.path.exists('./%s' %output_dir):
     os.mkdir('./%s' %output_dir)
 
@@ -61,11 +61,14 @@ img_transform = transforms.Compose([
 
 class CustomDataset(Dataset):
     def __init__(self, transform=None):
-        self.root_dir = "/Users/samuelchin/Desktop/MIT/Thesis/held-karp/"
+        if torch.cuda.is_available():
+            self.root_dir="/home/gridsan/jchin/held-karp"
+        else:
+            self.root_dir = "/Users/samuelchin/Desktop/MIT/Thesis/held-karp/"
         self.transform = transform
 
     def __len__(self):
-        return 100
+        return 10000
 
     def transform_img(self, img, colors, classes):
         new_img = np.zeros(img.shape[0:2])
@@ -82,13 +85,13 @@ class CustomDataset(Dataset):
         return img
 
     def transform_out(self, img):
-        colors = [GREEN]
-        classes = [PATH]
+        colors = [BLACK, RED, GREEN]
+        classes = [BACKGROUND, CITY, PATH]
         img = self.transform_img(img, colors, classes)
         return img
 
     def __getitem__(self, idx):
-        inp_name = os.path.join(self.root_dir, "inputs", "input_%05d.png" %idx)
+        inp_name = os.path.join(self.root_dir, "inputs_thick_128", "input_%05d.png" %idx)
         inp = cv2.imread(inp_name)
         inp = self.transform_inp(inp)
         inp = torch.as_tensor(inp, dtype=torch.int64)
@@ -98,7 +101,7 @@ class CustomDataset(Dataset):
         inp = torch.squeeze(inp)
         inp = inp.type(torch.FloatTensor)
 
-        out_name = os.path.join(self.root_dir, "outputs", "output_%05d.png" %idx)
+        out_name = os.path.join(self.root_dir, "outputs_thick_128", "output_%05d.png" %idx)
         out = cv2.imread(out_name)
         out = self.transform_out(out)
         out = torch.as_tensor(out, dtype=torch.int64)
@@ -220,15 +223,17 @@ def init_weights(m):
     if isinstance(m, nn.Conv2d):
         torch.nn.init.kaiming_uniform
 model.apply(init_weights)
-# weights = torch.FloatTensor([1, 1, 1]).cuda()
-criterion = nn.CrossEntropyLoss()
+weights = torch.FloatTensor([1, 1, 2]).cuda()
+criterion = nn.CrossEntropyLoss(weight=weights)
 # criterion = nn.NLLLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate,
                              weight_decay=1e-5)
 # optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
 for epoch in range(num_epochs):
+    print("Epoch: %d" %epoch)
     total_loss = 0
     for data in dataloader:
+        print("Loaded Batch")
         inp, out = data
         if torch.cuda.is_available():
             inp, out = inp.cuda(), out.cuda()
